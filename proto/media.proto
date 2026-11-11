@@ -1,0 +1,43 @@
+syntax = "proto3";
+package media;
+
+service MediaUploadService {
+  rpc Upload(stream UploadChunk) returns (UploadResult);   // client streaming
+  rpc GetQueueStatus(QueueStatusRequest) returns (QueueStatusResponse);
+}
+
+message UploadMeta {
+  string producer_id = 1;   // e.g. "P1"
+  string filename    = 2;
+  int64  size_bytes  = 3;
+  string sha256      = 4;   // used for duplicate detection (bonus)
+}
+
+message UploadChunk {
+  oneof payload {
+    UploadMeta meta = 1;    // always the FIRST message
+    bytes      data = 2;    // every message after that, <= 256 KB
+  }
+}
+
+enum UploadStatus {
+  UNKNOWN = 0;
+  ACCEPTED = 1;
+  DROPPED_QUEUE_FULL = 2;
+  DUPLICATE = 3;
+  REJECTED_INVALID = 4;
+}
+
+message UploadResult {
+  UploadStatus status = 1;
+  string message = 2;        // short human-readable text
+  string stored_name = 3;
+  int32  retry_after_ms = 4; // hint when dropped
+}
+
+message QueueStatusRequest {}
+message QueueStatusResponse {
+  int32 queue_length = 1;
+  int32 queue_capacity = 2;
+  bool  full = 3;
+}
