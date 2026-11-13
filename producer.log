@@ -1,0 +1,11 @@
+2026-11-13 13:45:22,451 | P1 | starting: 3 video(s) in sample_videos\producer1
+2026-11-13 13:45:22,455 | P2 | starting: 1 video(s) in sample_videos\producer2
+2026-11-13 13:45:22,459 | P3 | folder not found: sample_videos\producer3
+2026-11-13 13:45:22,460 | P3 | nothing to upload from sample_videos\producer3
+2026-11-13 13:45:22,599 | P2 | ACCEPTED sample15.mp4 (93054 bytes, 0.13s)
+2026-11-13 13:45:22,601 | P2 | done
+2026-11-13 13:45:22,607 | P1 | ACCEPTED large120.mp4 (1711685 bytes, 0.13s)
+2026-11-13 13:45:22,616 | P1 | DUPLICATE sample15.mp4: already uploaded
+2026-11-13 13:45:22,627 | P1 | DROPPED short5.mp4 (queue full), retry 1/3 in 0.50s
+2026-11-13 13:45:23,148 | P1 | ACCEPTED short5.mp4 (33365 bytes, 0.01s)
+2026-11-13 13:45:23,149 | P1 | done

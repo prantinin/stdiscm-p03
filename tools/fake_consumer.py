@@ -37,6 +37,10 @@ class FakeConsumer(media_pb2_grpc.MediaUploadServiceServicer):
         self._count = 0
         self._seen = set()          # sha256 values already accepted
 
+    def _release(self, sha):
+        with self._lock:
+            self._seen.discard(sha)
+
     def _result(self, status, message, stored_name="", retry_after_ms=0):
         return media_pb2.UploadResult(
             status=status, message=message,
@@ -63,34 +67,38 @@ class FakeConsumer(media_pb2_grpc.MediaUploadServiceServicer):
             log.info("%s DROPPED_QUEUE_FULL (upload #%d)", who, n)
             return self._result(media_pb2.DROPPED_QUEUE_FULL, "queue full",
                                 retry_after_ms=RETRY_AFTER_MS)
-        with self._lock:
-            if meta.sha256 in self._seen:
+        sha = meta.sha256.lower()
+        with self._lock:                      # atomic check-and-reserve, like the real dedupe module
+            if sha in self._seen:
                 log.info("%s DUPLICATE (hash seen before)", who)
                 return self._result(media_pb2.DUPLICATE, "already uploaded")
+            self._seen.add(sha)
 
         # Receive the bytes and check them, which tests the Producer's hashing and chunking.
         h = hashlib.sha256()
         received = 0
         for chunk in request_iterator:
             if chunk.WhichOneof("payload") != "data":
+                self._release(sha)
                 return self._result(media_pb2.REJECTED_INVALID, "extra meta message")
             h.update(chunk.data)
             received += len(chunk.data)
             if len(chunk.data) > 256 * 1024:
+                self._release(sha)
                 return self._result(media_pb2.REJECTED_INVALID, "chunk bigger than 256 KB")
         if self.delay_ms:
             time.sleep(self.delay_ms / 1000)
 
         if received != meta.size_bytes:
             log.warning("%s REJECTED size %d != %d", who, received, meta.size_bytes)
+            self._release(sha)
             return self._result(media_pb2.REJECTED_INVALID,
                                 f"size mismatch: got {received}, meta said {meta.size_bytes}")
         if h.hexdigest() != meta.sha256.lower():
             log.warning("%s REJECTED hash mismatch", who)
+            self._release(sha)
             return self._result(media_pb2.REJECTED_INVALID, "sha256 mismatch")
 
-        with self._lock:
-            self._seen.add(meta.sha256.lower())
         log.info("%s ACCEPTED %d bytes", who, received)
         return self._result(media_pb2.ACCEPTED, "ok", stored_name=f"{meta.producer_id}_{meta.filename}")
 
@@ -121,8 +129,13 @@ if __name__ == "__main__":
     ap.add_argument("--drop-every", type=int, default=0, help="drop every Nth upload")
     ap.add_argument("--delay-ms", type=int, default=0)
     ap.add_argument("--capacity", type=int, default=5, help="q reported by GetQueueStatus")
+    ap.add_argument("--log-file", default=None, help="also write the log to this file")
     args = ap.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(threadName)s | %(message)s")
+    handlers = [logging.StreamHandler()]
+    if args.log_file:
+        handlers.append(logging.FileHandler(args.log_file, mode="w", encoding="utf-8"))
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(threadName)s | %(message)s",
+                        handlers=handlers)
     srv = serve(args.port, args.force, args.drop_every, args.delay_ms, args.capacity)
     try:
         srv.wait_for_termination()

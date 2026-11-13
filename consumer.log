@@ -1,0 +1,6 @@
+2026-11-13 13:45:09,693 | MainThread | fake consumer listening on port 50051 (force=none, drop_every=4, delay_ms=0)
+2026-11-13 13:45:22,589 | rpc_1 | P2:sample15.mp4 ACCEPTED 93054 bytes
+2026-11-13 13:45:22,603 | rpc_0 | P1:large120.mp4 ACCEPTED 1711685 bytes
+2026-11-13 13:45:22,615 | rpc_1 | P1:sample15.mp4 DUPLICATE (hash seen before)
+2026-11-13 13:45:22,625 | rpc_0 | P1:short5.mp4 DROPPED_QUEUE_FULL (upload #4)
+2026-11-13 13:45:23,146 | rpc_1 | P1:short5.mp4 ACCEPTED 33365 bytes
