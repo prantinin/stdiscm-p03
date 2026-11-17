@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Upload Service - Live Gallery & Monitoring</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+</head>
+<body>
+    <!-- Top System Header & Leaky-Bucket Status Bar -->
+    <header class="app-header">
+        <div class="header-main">
+            <div class="brand">
+                <span class="brand-icon">🎬</span>
+                <div>
+                    <h1>Media Upload Service</h1>
+                    <p class="subtitle">Distributed Stream Processing & Video Gallery (VM-B)</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <span class="live-badge" id="live-indicator">
+                    <span class="pulse-dot"></span> Live (2s poll)
+                </span>
+                <button id="btn-refresh" class="btn-icon" title="Refresh Now">🔄</button>
+            </div>
+        </div>
+
+        <!-- Leaky-Bucket & Consumer Worker Status Dashboard -->
+        <div class="status-bar-container">
+            <div class="status-card bucket-card">
+                <div class="status-card-header">
+                    <span class="status-label">Leaky-Bucket Queue (q)</span>
+                    <span class="status-val" id="queue-ratio">0 / 5</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="queue-bar" style="width: 0%;"></div>
+                </div>
+                <div class="status-subtext" id="queue-status-text">Bucket slots available</div>
+            </div>
+
+            <div class="status-card">
+                <span class="status-label">Consumer Workers (c)</span>
+                <span class="status-val text-blue" id="stat-c">2</span>
+                <div class="status-subtext">Active drain threads</div>
+            </div>
+
+            <div class="status-card">
+                <span class="status-label">Saved Videos</span>
+                <span class="status-val text-green" id="stat-saved">0</span>
+                <div class="status-subtext">Committed to catalog</div>
+            </div>
+
+            <div class="status-card">
+                <span class="status-label">Dropped (Queue Full)</span>
+                <span class="status-val text-amber" id="stat-dropped">0</span>
+                <div class="status-subtext">Leaky bucket drops</div>
+            </div>
+
+            <div class="status-card">
+                <span class="status-label">Duplicates</span>
+                <span class="status-val text-purple" id="stat-duplicate">0</span>
+                <div class="status-subtext">Dedupe hash hits</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="container">
+        <!-- Gallery Controls & Count -->
+        <div class="gallery-header">
+            <div class="gallery-title-group">
+                <h2>Uploaded Video Gallery</h2>
+                <span class="video-counter" id="video-count-badge">0 videos</span>
+            </div>
+            <div class="gallery-hint">
+                <span>💡 <strong>Hover</strong> on card to preview 10s • <strong>Click</strong> to play full video with seeking</span>
+            </div>
+        </div>
+
+        <!-- Empty State Container -->
+        <div id="empty-state" class="empty-state hidden">
+            <div class="empty-icon">📭</div>
+            <h3>No videos uploaded yet</h3>
+            <p>Producer threads uploading videos over gRPC will appear here dynamically.</p>
+        </div>
+
+        <!-- Video Card Grid -->
+        <div id="video-grid" class="video-grid">
+            <!-- Cards rendered dynamically via JavaScript -->
+        </div>
+    </main>
+
+    <!-- Full Video Modal Player with Byte-Range Seeking -->
+    <div id="video-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <span class="modal-badge" id="modal-producer">P1</span>
+                    <h3 id="modal-title" class="modal-title">Video Player</h3>
+                </div>
+                <button id="modal-close" class="modal-close-btn" title="Close (Esc)">&times;</button>
+            </div>
+            <div class="modal-body">
+                <video id="modal-player" controls autoplay playsinline class="modal-video-element">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-meta-row">
+                    <span id="modal-size">Size: -</span>
+                    <span class="meta-dot">•</span>
+                    <span id="modal-duration">Duration: -</span>
+                    <span class="meta-dot">•</span>
+                    <span id="modal-uploaded">Uploaded: -</span>
+                    <span class="meta-dot">•</span>
+                    <span id="modal-hash" class="meta-hash" title="SHA-256">Hash: -</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application JavaScript -->
+    <script src="/js/app.js"></script>
+</body>
+</html>
