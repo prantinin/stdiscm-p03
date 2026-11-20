@@ -2,6 +2,7 @@ package com.example.media.consumer;
 
 import com.example.media.consumer.catalog.DefaultVideoCatalog;
 import com.example.media.consumer.dedupe.DedupeRegistry;
+import com.example.media.consumer.media.MediaException;
 import com.example.media.consumer.media.MediaProcessor;
 import com.example.media.consumer.queue.LeakyBucket;
 import com.example.media.consumer.server.ConsumerRuntime;
@@ -25,6 +26,7 @@ import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.HexFormat;
@@ -199,7 +201,7 @@ class ConsumerIntegrationTest {
         dedupeRegistry = new DedupeRegistry();
         leakyBucket = new LeakyBucket(capacity);
         videoCatalog = new DefaultVideoCatalog();
-        MediaProcessor mediaProcessor = new MediaProcessor();
+        MediaProcessor mediaProcessor = new TestMediaProcessor();
         MediaUploadServiceImpl service = new MediaUploadServiceImpl(config, dedupeRegistry, leakyBucket);
 
         consumerRuntime = new ConsumerRuntime(
@@ -297,5 +299,41 @@ class ConsumerIntegrationTest {
     private record UploadSession(
             StreamObserver<UploadChunk> request,
             CompletableFuture<UploadResult> response) {
+    }
+
+    private static final class TestMediaProcessor extends MediaProcessor {
+        @Override
+        public double probeDuration(Path src) {
+            return 5.0;
+        }
+
+        @Override
+        public void makePreview(Path src, Path dst) throws MediaException {
+            copy(src, dst);
+        }
+
+        @Override
+        public void makeThumbnail(Path src, Path dst) throws MediaException {
+            copy(src, dst);
+        }
+
+        @Override
+        public long[] compress(Path src, Path dst, int crf) throws MediaException {
+            try {
+                long sourceSize = Files.size(src);
+                copy(src, dst);
+                return new long[] {sourceSize, Files.size(dst)};
+            } catch (IOException e) {
+                throw new MediaException("Unable to copy test media", e);
+            }
+        }
+
+        private static void copy(Path src, Path dst) throws MediaException {
+            try {
+                Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new MediaException("Unable to copy test media", e);
+            }
+        }
     }
 }

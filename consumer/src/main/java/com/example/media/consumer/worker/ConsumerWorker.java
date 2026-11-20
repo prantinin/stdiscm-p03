@@ -73,11 +73,13 @@ public final class ConsumerWorker implements Runnable {
             process(job, filesToDeleteOnFailure);
         } catch (InterruptedException e) {
             cleanupFailedJob(filesToDeleteOnFailure, meta);
+            leakyBucket.recordRejected();
             Thread.currentThread().interrupt();
             log.info("Worker interrupted while processing {}", meta.getFilename());
         } catch (Exception e) {
             cleanupFailedJob(filesToDeleteOnFailure, meta);
-            log.error("Failed to process uploaded media {}", meta.getFilename(), e);
+            leakyBucket.recordRejected();
+            log.error("REJECTED uploaded media {}", meta.getFilename(), e);
         }
     }
 
