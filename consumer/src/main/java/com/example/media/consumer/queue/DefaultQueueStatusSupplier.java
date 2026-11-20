@@ -1,46 +1,35 @@
 package com.example.media.consumer.queue;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.example.media.consumer.ConsumerConfig;
 import org.springframework.stereotype.Component;
-
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Thread-safe default queue status supplier.
- * Maintains counts for saved, dropped, and duplicate uploads, as well as queue length and capacity.
+ * Reads queue state and counters from the consumer's shared leaky bucket.
  */
 @Component
 public class DefaultQueueStatusSupplier implements QueueStatusSupplier {
-    private final AtomicInteger queueLength = new AtomicInteger(0);
-    private final AtomicInteger queueCapacity = new AtomicInteger(5);
-    private final AtomicLong savedCount = new AtomicLong(0);
-    private final AtomicLong droppedCount = new AtomicLong(0);
-    private final AtomicLong duplicateCount = new AtomicLong(0);
-
+    private final LeakyBucket leakyBucket;
     private final int c;
     private final int q;
 
-    public DefaultQueueStatusSupplier(
-            @Value("${media.c:2}") int c,
-            @Value("${media.q:5}") int q) {
-        this.c = c;
-        this.q = q;
-        this.queueCapacity.set(q);
+    public DefaultQueueStatusSupplier(LeakyBucket leakyBucket, ConsumerConfig config) {
+        this.leakyBucket = leakyBucket;
+        this.c = config.getC();
+        this.q = config.getQ();
     }
 
     @Override
     public QueueStatus getStatus() {
-        int curLen = queueLength.get();
-        int cap = queueCapacity.get();
-        boolean full = curLen >= cap;
+        int curLen = leakyBucket.getActiveOrReservedCount();
+        int cap = leakyBucket.getCapacityQ();
         return new QueueStatus(
                 curLen,
                 cap,
-                full,
-                savedCount.get(),
-                droppedCount.get(),
-                duplicateCount.get(),
+                leakyBucket.getAvailableSlots() == 0,
+                leakyBucket.getSavedCount(),
+                leakyBucket.getDroppedCount(),
+                leakyBucket.getDuplicateCount(),
                 c,
                 q
         );
@@ -48,38 +37,16 @@ public class DefaultQueueStatusSupplier implements QueueStatusSupplier {
 
     @Override
     public void recordSaved() {
-        savedCount.incrementAndGet();
+        leakyBucket.recordSaved();
     }
 
     @Override
     public void recordDropped() {
-        droppedCount.incrementAndGet();
+        leakyBucket.recordDropped();
     }
 
     @Override
     public void recordDuplicate() {
-        duplicateCount.incrementAndGet();
-    }
-
-    @Override
-    public void updateQueue(int currentLength, int capacity) {
-        this.queueLength.set(currentLength);
-        this.queueCapacity.set(capacity);
-    }
-
-    public void setQueueLength(int length) {
-        this.queueLength.set(length);
-    }
-
-    public void setSavedCount(long count) {
-        this.savedCount.set(count);
-    }
-
-    public void setDroppedCount(long count) {
-        this.droppedCount.set(count);
-    }
-
-    public void setDuplicateCount(long count) {
-        this.duplicateCount.set(count);
+        leakyBucket.recordDuplicate();
     }
 }

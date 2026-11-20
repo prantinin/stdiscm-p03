@@ -1,5 +1,6 @@
 package com.example.media.consumer.queue;
 
+import com.example.media.proto.UploadMeta;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -13,8 +14,8 @@ class LeakyBucketTest {
     @Test
     void takingJobReleasesCapacityBeforeProcessingCompletes() throws InterruptedException {
         LeakyBucket bucket = new LeakyBucket(1);
-        Object meta = new Object();
-        Job<Object> job = new Job<>(Path.of("upload.part"), meta);
+        UploadMeta meta = UploadMeta.newBuilder().setFilename("clip.mp4").build();
+        Job job = new Job(Path.of("upload.part"), meta);
 
         assertTrue(bucket.tryReserve());
         assertFalse(bucket.tryReserve());

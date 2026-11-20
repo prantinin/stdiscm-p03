@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class LeakyBucket {
     private final int capacityQ;
     private final Semaphore slots;
-    private final ArrayBlockingQueue<Job<?>> queue;
+    private final ArrayBlockingQueue<Job> queue;
 
     private final AtomicLong accepted = new AtomicLong();
     private final AtomicLong dropped = new AtomicLong();
@@ -50,7 +50,7 @@ public final class LeakyBucket {
     /**
      * Adds a job to the bounded worker queue without blocking.
      */
-    public boolean enqueue(Job<?> job) {
+    public boolean enqueue(Job job) {
         return queue.offer(Objects.requireNonNull(job, "job must not be null"));
     }
 
@@ -58,9 +58,21 @@ public final class LeakyBucket {
      * Waits for the next job and releases its upload slot as soon as it leaves
      * the queue, allowing another upload while the worker processes this job.
      */
-    public Job<?> takeJob() throws InterruptedException {
-        Job<?> job = queue.take();
+    public Job takeJob() throws InterruptedException {
+        Job job = queue.take();
         slots.release();
+        return job;
+    }
+
+    /**
+     * Removes a queued job without blocking and releases its upload slot.
+     * Used to discard work that remains queued during application shutdown.
+     */
+    public Job pollJob() {
+        Job job = queue.poll();
+        if (job != null) {
+            slots.release();
+        }
         return job;
     }
 
@@ -98,6 +110,10 @@ public final class LeakyBucket {
 
     public void recordAccepted() {
         accepted.incrementAndGet();
+    }
+
+    public void recordDropped() {
+        dropped.incrementAndGet();
     }
 
     public void recordDuplicate() {

@@ -24,9 +24,4 @@ public interface QueueStatusSupplier {
      * Records a duplicate upload attempt.
      */
     void recordDuplicate();
-
-    /**
-     * Updates queue length and capacity dynamically.
-     */
-    void updateQueue(int currentLength, int capacity);
 }

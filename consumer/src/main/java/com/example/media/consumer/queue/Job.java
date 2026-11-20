@@ -1,5 +1,7 @@
 package com.example.media.consumer.queue;
 
+import com.example.media.proto.UploadMeta;
+
 import java.nio.file.Path;
 import java.util.Objects;
 
@@ -9,11 +11,11 @@ import java.util.Objects;
  * <p>The metadata type is generic so this queue can hold the generated
  * {@code UploadMeta} type without depending on a particular protobuf package.</p>
  */
-public final class Job<T> {
+public final class Job {
     private final Path tempPartPath;
-    private final T meta;
+    private final UploadMeta meta;
 
-    public Job(Path tempPartPath, T meta) {
+    public Job(Path tempPartPath, UploadMeta meta) {
         this.tempPartPath = Objects.requireNonNull(tempPartPath, "tempPartPath must not be null");
         this.meta = Objects.requireNonNull(meta, "meta must not be null");
     }
@@ -22,7 +24,7 @@ public final class Job<T> {
         return tempPartPath;
     }
 
-    public T getMeta() {
+    public UploadMeta getMeta() {
         return meta;
     }
 }

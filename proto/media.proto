@@ -1,5 +1,7 @@
 syntax = "proto3";
 package media;
+option java_package = "com.example.media.proto";
+option java_multiple_files = true;
 
 service MediaUploadService {
   rpc Upload(stream UploadChunk) returns (UploadResult);   // client streaming
