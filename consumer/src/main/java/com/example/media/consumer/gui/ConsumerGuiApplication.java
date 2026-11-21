@@ -8,6 +8,7 @@ import com.example.media.consumer.media.MediaProcessor;
 import com.example.media.consumer.queue.LeakyBucket;
 import com.example.media.consumer.server.ConsumerRuntime;
 import com.example.media.consumer.server.MediaUploadServiceImpl;
+import org.springframework.boot.ApplicationArguments;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,8 +49,9 @@ public class ConsumerGuiApplication {
     }
 
     @Bean
-    public ConsumerConfig consumerConfig(Environment environment) throws IOException {
-        return ConsumerConfig.parse(consumerArguments(environment));
+    public ConsumerConfig consumerConfig(ApplicationArguments applicationArguments,
+                                         Environment environment) throws IOException {
+        return ConsumerConfig.parse(consumerArguments(applicationArguments, environment));
     }
 
     @Bean
@@ -114,7 +116,8 @@ public class ConsumerGuiApplication {
                 mediaUploadService).start();
     }
 
-    private static String[] consumerArguments(Environment environment) {
+    private static String[] consumerArguments(ApplicationArguments applicationArguments,
+                                              Environment environment) {
         String[] options = {
                 "c",
                 "q",
@@ -135,8 +138,15 @@ public class ConsumerGuiApplication {
                 case "preview-dir" -> "media.previews-dir";
                 default -> null;
             };
-            boolean present = environment.containsProperty(option);
-            String value = present ? environment.getProperty(option) : null;
+            // Only Spring's actual application arguments represent Consumer CLI
+            // options. Short Environment keys can resolve unrelated JVM/system
+            // properties (for example, a working-directory value for "c").
+            boolean present = applicationArguments.containsOption(option);
+            List<String> optionValues = present ? applicationArguments.getOptionValues(option) : null;
+            String value = optionValues == null || optionValues.isEmpty() ? null : optionValues.get(0);
+
+            // Keep the explicitly namespaced Spring property aliases supported,
+            // while avoiding ambiguous short keys such as "c" and "q".
             if (!present && alias != null) {
                 present = environment.containsProperty(alias);
                 value = present ? environment.getProperty(alias) : null;
