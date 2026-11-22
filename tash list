@@ -1,0 +1,19 @@
+[33m4301339[m[33m ([m[1;36mHEAD[m[33m)[m HEAD@{Mon Nov 23 02:40:38 2026}: rebase (start): checkout main
+[33m13c5a7b[m[33m ([m[1;31morigin/feature/producer[m[33m, [m[1;32mfeature/producer[m[33m)[m HEAD@{Mon Nov 23 02:39:55 2026}: commit: fixed inconsistencies with files connected to new producer files
+[33m57367b4[m HEAD@{Mon Nov 23 01:25:46 2026}: commit: tested producer working and removed duplicate lines in media.proto
+[33mea002be[m HEAD@{Mon Nov 23 01:22:26 2026}: commit (merge): Merge remote-tracking branch 'origin/main' into feature/producer
+[33m4301339[m[33m ([m[1;36mHEAD[m[33m)[m HEAD@{Thu Nov 19 00:22:07 2026}: commit: Implement media producer components
+[33m73720a9[m[33m ([m[1;32mmain[m[33m)[m HEAD@{Thu Nov 19 00:21:41 2026}: checkout: moving from main to feature/producer
+[33m73720a9[m[33m ([m[1;32mmain[m[33m)[m HEAD@{Wed Nov 18 01:04:12 2026}: reset: moving to origin/main
+[33m630ded5[m HEAD@{Wed Nov 18 01:03:14 2026}: reset: moving to HEAD
+[33m630ded5[m HEAD@{Tue Nov 17 23:58:00 2026}: commit: Revert "deleted python packages and caches"
+[33md154d75[m HEAD@{Tue Nov 17 23:57:46 2026}: commit: Revert "deleted python packages and caches"
+[33mb7321f3[m HEAD@{Tue Nov 17 23:56:24 2026}: pull --ff-only: Fast-forward
+[33m1af070d[m HEAD@{Tue Nov 17 23:52:52 2026}: reset: moving to HEAD~1
+[33mb7321f3[m HEAD@{Tue Nov 17 23:47:45 2026}: commit: deleted python packages and caches
+[33m1af070d[m HEAD@{Fri Nov 13 13:47:08 2026}: commit: finished producer and summarized logs
+[33m6998231[m HEAD@{Fri Nov 13 13:04:36 2026}: commit: built DedupeRegistry with one threading.Lock
+[33m4ad5979[m HEAD@{Thu Nov 12 11:30:50 2026}: commit: done media and dedupe files in consumer and test folders
+[33m1096b2b[m HEAD@{Wed Nov 11 17:07:26 2026}: commit: made test videos via ffmpeg
+[33m817bf28[m HEAD@{Wed Nov 11 15:59:08 2026}: commit: set up python and froze proto
+[33m65291fd[m HEAD@{Wed Nov 11 13:33:02 2026}: commit (initial): made directory
