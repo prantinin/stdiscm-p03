@@ -5,6 +5,7 @@ import com.example.media.consumer.catalog.VideoCatalog;
 import com.example.media.consumer.catalog.VideoItem;
 import com.example.media.consumer.dedupe.DedupeRegistry;
 import com.example.media.consumer.media.MediaProcessor;
+import com.example.media.consumer.media.MediaException;
 import com.example.media.consumer.queue.Job;
 import com.example.media.consumer.queue.LeakyBucket;
 import com.example.media.proto.UploadMeta;
@@ -83,7 +84,7 @@ public final class ConsumerWorker implements Runnable {
         }
     }
 
-    private void process(Job job, List<Path> filesToDeleteOnFailure) throws IOException {
+    private void process(Job job, List<Path> filesToDeleteOnFailure) throws IOException, MediaException {
         UploadMeta meta = job.getMeta();
         String storedName = createStoredName(meta);
         Path storedPath = config.getUploadDir().resolve(storedName);

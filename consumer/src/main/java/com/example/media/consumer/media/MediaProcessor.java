@@ -21,7 +21,7 @@ public class MediaProcessor {
      * @param command command and its arguments
      * @return standard output produced by the command
      */
-    private String runCommand(List<String> command)
+    protected String runCommand(List<String> command)
             throws MediaException {
 
         Path stdoutFile = null;

@@ -55,7 +55,7 @@ public class ConsumerGuiApplication {
     }
 
     @Bean
-    public DedupeRegistry dedupeRegistry(ConsumerConfig config) {
+    public DedupeRegistry dedupeRegistry(ConsumerConfig config) throws IOException {
         DedupeRegistry registry = new DedupeRegistry();
         registry.rebuildFromFolder(config.getUploadDir());
         return registry;
