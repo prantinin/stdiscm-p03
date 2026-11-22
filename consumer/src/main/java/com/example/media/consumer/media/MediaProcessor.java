@@ -1,201 +1,409 @@
+
 package com.example.media.consumer.media;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.security.SecureRandom;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
-/**
- * Thread-safe ffmpeg/ffprobe helpers for consumer workers.
- */
 public class MediaProcessor {
-    private static final long COMMAND_TIMEOUT_SECONDS = 120;
-    private static final int BUFFER_SIZE = 8192;
-    private static final int PREVIEW_SECONDS = 10;
-    private static final SecureRandom RANDOM = new SecureRandom();
 
-    private final CommandRunner commandRunner;
+    private static final long TIMEOUT_SECONDS = 120;
 
-    public MediaProcessor() {
-        this(MediaProcessor::runProcess);
-    }
+    /**
+     * Executes an external media-processing command.
+     *
+     * Captures stdout and stderr, enforces a 120-second timeout,
+     * and throws MediaException if execution fails.
+     *
+     * @param command command and its arguments
+     * @return standard output produced by the command
+     */
+    protected String runCommand(List<String> command)
+            throws MediaException {
 
-    public MediaProcessor(CommandRunner commandRunner) {
-        this.commandRunner = Objects.requireNonNull(commandRunner, "commandRunner must not be null");
-    }
-
-    public double probeDuration(Path src) throws MediaException {
-        Objects.requireNonNull(src, "src must not be null");
-        String output = commandRunner.run(List.of(
-                "ffprobe", "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=nw=1:nk=1",
-                src.toString()));
-        try {
-            double duration = Double.parseDouble(output.trim());
-            if (!Double.isFinite(duration) || duration <= 0) {
-                throw new MediaException("Invalid media duration " + duration + " for " + src);
-            }
-            return duration;
-        } catch (NumberFormatException e) {
-            throw new MediaException("No media duration found for " + src, e);
-        }
-    }
-
-    public void makePreview(Path src, Path dst) throws MediaException {
-        Objects.requireNonNull(src, "src must not be null");
-        encode(List.of(
-                "ffmpeg", "-v", "error", "-y",
-                "-i", src.toString(),
-                "-t", Integer.toString(PREVIEW_SECONDS),
-                "-an",
-                "-vf", "scale=-2:360",
-                "-c:v", "libx264",
-                "-preset", "veryfast",
-                "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart"), dst);
-    }
-
-    public void makeThumbnail(Path src, Path dst) throws MediaException {
-        Objects.requireNonNull(src, "src must not be null");
-        double duration = probeDuration(src);
-        String seek = duration >= 1 ? "1" : "0";
-        encode(List.of(
-                "ffmpeg", "-v", "error", "-y",
-                "-ss", seek,
-                "-i", src.toString(),
-                "-frames:v", "1",
-                "-vf", "scale=320:-1"), dst);
-    }
-
-    public long[] compress(Path src, Path dst, int crf) throws MediaException {
-        Objects.requireNonNull(src, "src must not be null");
-        long sourceSize;
-        try {
-            sourceSize = Files.size(src);
-        } catch (IOException e) {
-            throw new MediaException("Unable to read media file size: " + src, e);
-        }
-
-        encode(List.of(
-                "ffmpeg", "-v", "error", "-y",
-                "-i", src.toString(),
-                "-c:v", "libx264",
-                "-crf", Integer.toString(crf),
-                "-preset", "veryfast",
-                "-pix_fmt", "yuv420p",
-                "-c:a", "aac",
-                "-b:a", "96k",
-                "-movflags", "+faststart"), dst);
+        Path stdoutFile = null;
+        Path stderrFile = null;
+        Process process = null;
 
         try {
-            return new long[] {sourceSize, Files.size(dst)};
-        } catch (IOException e) {
-            throw new MediaException("Unable to read compressed file size: " + dst, e);
-        }
-    }
+            stdoutFile = Files.createTempFile("media-out-", ".tmp");
+            stderrFile = Files.createTempFile("media-err-", ".tmp");
 
-    private void encode(List<String> command, Path dst) throws MediaException {
-        Objects.requireNonNull(dst, "dst must not be null");
-        Path absoluteDst = dst.toAbsolutePath();
-        Path parent = absoluteDst.getParent();
-        Path tmp = temporaryPath(absoluteDst);
-        try {
-            Files.createDirectories(parent);
-            List<String> fullCommand = new ArrayList<>(command);
-            fullCommand.add(tmp.toString());
-            commandRunner.run(fullCommand);
-            try {
-                Files.move(tmp, absoluteDst,
-                        StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(tmp, absoluteDst, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } catch (IOException e) {
-            try {
-                Files.deleteIfExists(tmp);
-            } catch (IOException cleanupError) {
-                e.addSuppressed(cleanupError);
-            }
-            if (e instanceof MediaException mediaException) {
-                throw mediaException;
-            }
-            throw new MediaException("Unable to write media output to " + dst, e);
-        }
-    }
+            ProcessBuilder builder = new ProcessBuilder(command);
 
-    private static Path temporaryPath(Path dst) {
-        String filename = dst.getFileName().toString();
-        int extensionIndex = filename.lastIndexOf('.');
-        String stem = extensionIndex > 0 ? filename.substring(0, extensionIndex) : filename;
-        String extension = extensionIndex > 0 ? filename.substring(extensionIndex) : "";
-        return dst.resolveSibling(stem + "." + Long.toHexString(RANDOM.nextLong()) + ".tmp" + extension);
-    }
+            builder.redirectOutput(stdoutFile.toFile());
+            builder.redirectError(stderrFile.toFile());
 
-    private static String runProcess(List<String> command) throws MediaException {
-        Process process;
-        try {
-            process = new ProcessBuilder(command).redirectErrorStream(true).start();
-        } catch (IOException e) {
-            throw new MediaException(
-                    command.get(0) + " could not be started; ensure ffmpeg and ffprobe are on PATH", e);
-        }
+            process = builder.start();
 
-        CompletableFuture<byte[]> output = CompletableFuture.supplyAsync(() -> readOutput(process));
-        try {
-            if (!process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+            boolean finished = process.waitFor(
+                    TIMEOUT_SECONDS,
+                    TimeUnit.SECONDS
+            );
+
+            if (!finished) {
                 process.destroyForcibly();
                 process.waitFor();
-                throw new MediaException(command.get(0) + " timed out after "
-                        + COMMAND_TIMEOUT_SECONDS + " seconds");
+
+                throw new MediaException(
+                        "Media command timed out after "
+                                + TIMEOUT_SECONDS + " seconds."
+                );
             }
 
-            String text = new String(
-                    output.get(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS),
-                    StandardCharsets.UTF_8);
+            String stdout = Files.readString(
+                    stdoutFile, StandardCharsets.UTF_8
+            );
+
+            String stderr = Files.readString(
+                    stderrFile, StandardCharsets.UTF_8
+            );
+
             if (process.exitValue() != 0) {
-                String tail = text.length() <= 300 ? text : text.substring(text.length() - 300);
-                throw new MediaException(command.get(0) + " failed: " + tail.trim());
+                throw new MediaException(
+                        "Media command failed with exit code "
+                                + process.exitValue()
+                                + ". Error: " + stderr
+                );
             }
-            return text;
+
+            return stdout.trim();
+
         } catch (InterruptedException e) {
-            process.destroyForcibly();
-            Thread.currentThread().interrupt();
-            throw new MediaException(command.get(0) + " was interrupted", e);
-        } catch (ExecutionException | TimeoutException e) {
-            process.destroyForcibly();
-            throw new MediaException("Unable to read output from " + command.get(0), e);
-        }
-    }
-
-    private static byte[] readOutput(Process process) {
-        try (InputStream input = process.getInputStream()) {
-            byte[] buffer = new byte[BUFFER_SIZE];
-            java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
-            int read;
-            while ((read = input.read(buffer)) != -1) {
-                output.write(buffer, 0, read);
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
             }
-            return output.toByteArray();
+
+            Thread.currentThread().interrupt();
+
+            throw new MediaException(
+                    "Media command was interrupted.", e
+            );
+
         } catch (IOException e) {
-            throw new java.util.concurrent.CompletionException(e);
+            throw new MediaException(
+                    "Unable to execute media command: "
+                            + e.getMessage(), e
+            );
+
+        } finally {
+            deleteTemporaryFile(stdoutFile);
+            deleteTemporaryFile(stderrFile);
         }
     }
 
-    @FunctionalInterface
-    public interface CommandRunner {
-        String run(List<String> command) throws MediaException;
+
+    /**
+     * Returns the duration of a video in seconds.
+     *
+     * Uses ffprobe to inspect the input video.
+     *
+     * @param file path to the source video
+     * @return duration in seconds
+     * @throws MediaException if the file is invalid or cannot be inspected
+     */
+    public double probeDuration(Path file) throws MediaException {
+
+        if (file == null || !Files.isRegularFile(file)) {
+            throw new MediaException(
+                    "Video file does not exist: " + file
+            );
+        }
+
+        List<String> command = List.of(
+                "ffprobe",
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=nw=1:nk=1",
+                file.toAbsolutePath().toString()
+        );
+
+        String output = runCommand(command);
+
+        try {
+            double duration = Double.parseDouble(output);
+
+            if (!Double.isFinite(duration) || duration < 0) {
+                throw new NumberFormatException(
+                        "Invalid duration value"
+                );
+            }
+
+            return duration;
+
+        } catch (NumberFormatException e) {
+            throw new MediaException(
+                    "Unable to read video duration: " + output, e
+            );
+        }
+    }
+
+
+    /**
+     * Creates a preview clip containing the first 10 seconds of a video.
+     *
+     * The output is encoded as H.264 MP4, scaled to 360p,
+     * and has no audio. If the source is shorter than 10 seconds,
+     * the entire video is used.
+     *
+     * @param input path to the source video
+     * @param output path where the preview clip will be saved
+     * @throws MediaException if preview generation fails
+     */
+    public void makePreview(Path input, Path output) throws MediaException {
+
+        if (input == null || !Files.isRegularFile(input)) {
+            throw new MediaException("Video file does not exist: " + input);
+        }
+
+        if (output == null) {
+            throw new MediaException("Output path cannot be null.");
+        }
+
+        Path temporaryOutput = null;
+
+        try {
+            Path absoluteOutput = output.toAbsolutePath();
+            Path outputDirectory = absoluteOutput.getParent();
+
+            Files.createDirectories(outputDirectory);
+
+            temporaryOutput = Files.createTempFile(
+                    outputDirectory,
+                    "preview-",
+                    ".mp4"
+            );
+
+            List<String> command = List.of(
+                    "ffmpeg",
+                    "-y",
+                    "-i", input.toAbsolutePath().toString(),
+                    "-t", "10",
+                    "-vf", "scale=-2:360",
+                    "-an",
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    "-movflags", "+faststart",
+                    temporaryOutput.toString()
+            );
+
+            runCommand(command);
+
+            if (!Files.isRegularFile(temporaryOutput)
+                    || Files.size(temporaryOutput) == 0) {
+                throw new MediaException(
+                        "Preview video was not created: " + output
+                );
+            }
+
+            try {
+                Files.move(
+                        temporaryOutput,
+                        absoluteOutput,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                );
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(
+                        temporaryOutput,
+                        absoluteOutput,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                );
+            }
+
+        } catch (IOException e) {
+            throw new MediaException(
+                    "Unable to create preview: " + e.getMessage(), e
+            );
+
+        } finally {
+            deleteTemporaryFile(temporaryOutput);
+        }
+    }
+
+
+    public void makeThumbnail(Path input, Path output) throws MediaException {
+        if (input == null || !Files.isRegularFile(input)) {
+            throw new MediaException("Video file does not exist: " + input);
+        }
+
+        if (output == null) {
+            throw new MediaException("Output path cannot be null.");
+        }
+
+        Path temporaryOutput = null;
+
+        try {
+            Path absoluteOutput = output.toAbsolutePath();
+            Path outputDirectory = absoluteOutput.getParent();
+
+            Files.createDirectories(outputDirectory);
+
+            temporaryOutput = Files.createTempFile(
+                    outputDirectory,
+                    "thumbnail-",
+                    ".jpg"
+            );
+
+            List<String> command = List.of(
+                    "ffmpeg", "-y",
+                    "-i", input.toAbsolutePath().toString(),
+                    "-frames:v", "1",
+                    "-vf", "scale=320:-2",
+                    "-q:v", "2",
+                    temporaryOutput.toString()
+            );
+
+            runCommand(command);
+
+            if (!Files.isRegularFile(temporaryOutput)
+                    || Files.size(temporaryOutput) == 0) {
+                throw new MediaException(
+                        "Thumbnail was not created: " + output
+                );
+            }
+
+            try {
+                Files.move(
+                        temporaryOutput,
+                        absoluteOutput,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                );
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(
+                        temporaryOutput,
+                        absoluteOutput,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                );
+            }
+
+        } catch (IOException e) {
+            throw new MediaException(
+                    "Unable to create thumbnail: " + e.getMessage(), e
+            );
+        } finally {
+            deleteTemporaryFile(temporaryOutput);
+        }
+    }
+
+
+    public record CompressionResult(
+            long originalSizeBytes,
+            long compressedSizeBytes
+    ) {}
+
+
+    public CompressionResult compress(Path input, Path output)
+            throws MediaException {
+        return compress(input, output, 28);
+    }
+
+    public CompressionResult compress(Path input, Path output, int crf)
+            throws MediaException {
+
+        if (input == null || !Files.isRegularFile(input)) {
+            throw new MediaException("Video file does not exist: " + input);
+        }
+
+        if (output == null) {
+            throw new MediaException("Output path cannot be null.");
+        }
+
+        if (crf < 0 || crf > 51) {
+            throw new MediaException("CRF must be between 0 and 51.");
+        }
+
+        Path temporaryOutput = null;
+
+        try {
+            long originalSize = Files.size(input);
+
+            Path absoluteOutput = output.toAbsolutePath();
+            Path outputDirectory = absoluteOutput.getParent();
+
+            Files.createDirectories(outputDirectory);
+
+            temporaryOutput = Files.createTempFile(
+                    outputDirectory,
+                    "compressed-",
+                    ".mp4"
+            );
+
+            List<String> command = List.of(
+                    "ffmpeg", "-y",
+                    "-i", input.toAbsolutePath().toString(),
+                    "-map", "0:v:0",
+                    "-map", "0:a?",
+                    "-c:v", "libx264",
+                    "-crf", String.valueOf(crf),
+                    "-preset", "medium",
+                    "-c:a", "aac",
+                    "-b:a", "128k",
+                    "-movflags", "+faststart",
+                    temporaryOutput.toString()
+            );
+
+            runCommand(command);
+
+            if (!Files.isRegularFile(temporaryOutput)
+                    || Files.size(temporaryOutput) == 0) {
+                throw new MediaException(
+                        "Compressed video was not created: " + output
+                );
+            }
+
+            long compressedSize = Files.size(temporaryOutput);
+
+            try {
+                Files.move(
+                        temporaryOutput,
+                        absoluteOutput,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                );
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(
+                        temporaryOutput,
+                        absoluteOutput,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                );
+            }
+
+            return new CompressionResult(originalSize, compressedSize);
+
+        } catch (IOException e) {
+            throw new MediaException(
+                    "Unable to compress video: " + e.getMessage(), e
+            );
+        } finally {
+            deleteTemporaryFile(temporaryOutput);
+        }
+    }
+
+
+    private boolean fileIsEmpty(Path file) throws MediaException {
+        try {
+            return Files.size(file) == 0;
+        } catch (IOException e) {
+            throw new MediaException(
+                    "Unable to verify preview image: " + e.getMessage(), e
+            );
+        }
+    }
+
+
+    private void deleteTemporaryFile(Path file) {
+        if (file != null) {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException ignored) {
+                // Temporary-file cleanup should not hide
+                // the original processing error.
+            }
+        }
     }
 }

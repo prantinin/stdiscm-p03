@@ -462,18 +462,27 @@ class ConsumerVerificationTest {
     @Test
     void mediaProcessorProducesTenSecondPreviewThumbnailAndCompressedOutputAtomically() throws Exception {
         List<List<String>> commands = new ArrayList<>();
-        MediaProcessor processor = new MediaProcessor(command -> {
-            commands.add(List.copyOf(command));
-            if (command.get(0).equals("ffprobe")) {
-                return "12.5\n";
+        
+        MediaProcessor processor = new MediaProcessor() {
+            @Override
+            protected String runCommand(List<String> command) throws MediaException {
+                commands.add(List.copyOf(command));
+
+                if (command.get(0).equals("ffprobe")) {
+                    return "12.5\n";
+                }
+
+                try {
+                    Files.writeString(
+                            Path.of(command.get(command.size() - 1)),
+                            "encoded output");
+                } catch (IOException e) {
+                    throw new MediaException("Unable to create fake media output", e);
+                }
+
+                return "";
             }
-            try {
-                Files.writeString(Path.of(command.get(command.size() - 1)), "encoded output");
-            } catch (IOException e) {
-                throw new MediaException("Unable to create fake media output", e);
-            }
-            return "";
-        });
+        };
         Path source = tempDir.resolve("source.mp4");
         Path preview = tempDir.resolve("preview.mp4");
         Path thumbnail = tempDir.resolve("thumbnail.jpg");
@@ -488,14 +497,17 @@ class ConsumerVerificationTest {
 
         processor.makeThumbnail(source, thumbnail);
         List<String> thumbnailCommand = commands.get(commands.size() - 1);
-        assertEquals("1", argumentAfter(thumbnailCommand, "-ss"));
+        assertFalse(thumbnailCommand.contains("-ss"));
         assertEquals("1", argumentAfter(thumbnailCommand, "-frames:v"));
         assertTrue(Files.exists(thumbnail));
 
-        long[] sizes = processor.compress(source, compressed, 28);
+        MediaProcessor.CompressionResult sizes = processor.compress(source, compressed, 28);
+
         List<String> compressCommand = commands.get(commands.size() - 1);
+
         assertEquals("28", argumentAfter(compressCommand, "-crf"));
-        assertArrayEquals(new long[] {Files.size(source), Files.size(compressed)}, sizes);
+        assertEquals(Files.size(source), sizes.originalSizeBytes());
+        assertEquals(Files.size(compressed), sizes.compressedSizeBytes());
         assertEquals(0, temporaryMediaFileCount(tempDir));
     }
 
@@ -749,11 +761,13 @@ class ConsumerVerificationTest {
         }
 
         @Override
-        public long[] compress(Path src, Path dst, int crf) throws MediaException {
+        public MediaProcessor.CompressionResult compress(
+                Path src, Path dst, int crf) throws MediaException {
             try {
                 long oldSize = Files.size(src);
                 copy(src, dst);
-                return new long[] {oldSize, Files.size(dst)};
+                return new MediaProcessor.CompressionResult(
+                        oldSize, Files.size(dst));
             } catch (IOException e) {
                 throw new MediaException("Unable to copy test media", e);
             }

@@ -318,11 +318,13 @@ class ConsumerIntegrationTest {
         }
 
         @Override
-        public long[] compress(Path src, Path dst, int crf) throws MediaException {
+        public MediaProcessor.CompressionResult compress(
+                Path src, Path dst, int crf) throws MediaException {
             try {
                 long sourceSize = Files.size(src);
                 copy(src, dst);
-                return new long[] {sourceSize, Files.size(dst)};
+                return new MediaProcessor.CompressionResult(
+                        sourceSize, Files.size(dst));
             } catch (IOException e) {
                 throw new MediaException("Unable to copy test media", e);
             }

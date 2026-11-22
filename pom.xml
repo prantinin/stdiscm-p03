@@ -13,6 +13,8 @@
     <description>Media Upload Service - Java Multi-Module Project</description>
 
     <modules>
+        <module>common</module>
+        <module>producer</module>
         <module>consumer</module>
     </modules>
 
