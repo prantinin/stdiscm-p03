@@ -1,8 +1,14 @@
 package com.example.media.consumer.gui;
 
+import com.example.media.consumer.ConsumerConfig;
 import com.example.media.consumer.catalog.DefaultVideoCatalog;
 import com.example.media.consumer.catalog.FakeVideoCatalog;
-import com.example.media.consumer.catalog.VideoCatalog;
+import com.example.media.consumer.dedupe.DedupeRegistry;
+import com.example.media.consumer.media.MediaProcessor;
+import com.example.media.consumer.queue.LeakyBucket;
+import com.example.media.consumer.server.ConsumerRuntime;
+import com.example.media.consumer.server.MediaUploadServiceImpl;
+import org.springframework.boot.ApplicationArguments;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,10 +17,15 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Primary;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.env.Environment;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Spring Boot Application for Member 3: Consumer Web GUI.
- * Serves the browser-based gallery, hover previews, video streaming, and leaky-bucket metrics.
+ * Spring Boot application for the consumer GUI, upload service, and workers.
  */
 @SpringBootApplication
 @ComponentScan(basePackages = "com.example.media.consumer")
@@ -38,20 +49,117 @@ public class ConsumerGuiApplication {
     }
 
     @Bean
+    public ConsumerConfig consumerConfig(ApplicationArguments applicationArguments,
+                                         Environment environment) throws IOException {
+        return ConsumerConfig.parse(consumerArguments(applicationArguments, environment));
+    }
+
+    @Bean
+    public DedupeRegistry dedupeRegistry(ConsumerConfig config) {
+        DedupeRegistry registry = new DedupeRegistry();
+        registry.rebuildFromFolder(config.getUploadDir());
+        return registry;
+    }
+
+    @Bean
+    public LeakyBucket leakyBucket(ConsumerConfig config) {
+        return new LeakyBucket(config.getQ());
+    }
+
+    @Bean
+    public MediaProcessor mediaProcessor() {
+        return new MediaProcessor();
+    }
+
+    @Bean
+    public MediaUploadServiceImpl mediaUploadService(
+            ConsumerConfig config,
+            DedupeRegistry dedupeRegistry,
+            LeakyBucket leakyBucket) {
+        return new MediaUploadServiceImpl(config, dedupeRegistry, leakyBucket);
+    }
+
+    @Bean
     @Primary
-    public VideoCatalog videoCatalog(
-            @Value("${media.use-fake:true}") boolean useFake,
-            @Value("${media.uploads-dir:./uploads}") String uploadsDir,
-            @Value("${media.previews-dir:./previews}") String previewsDir) {
+    public DefaultVideoCatalog videoCatalog(
+            ConsumerConfig config,
+            @Value("${media.use-fake:true}") boolean useFake) {
 
         if (useFake) {
             log.info(">>> Initializing FakeVideoCatalog (USE_FAKE=true) for GUI development & testing per §6.4");
             return new FakeVideoCatalog();
-        } else {
-            log.info(">>> Initializing DefaultVideoCatalog (USE_FAKE=false) using uploadsDir={}", uploadsDir);
-            DefaultVideoCatalog catalog = new DefaultVideoCatalog();
-            catalog.scanAndRegisterExisting(uploadsDir, previewsDir);
-            return catalog;
         }
+        log.info(">>> Initializing DefaultVideoCatalog (USE_FAKE=false) using uploadsDir={}",
+                config.getUploadDir());
+        DefaultVideoCatalog catalog = new DefaultVideoCatalog();
+        catalog.scanAndRegisterExisting(
+                config.getUploadDir().toString(),
+                config.getPreviewDir().toString());
+        return catalog;
+    }
+
+    @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(name = "media.grpc.enabled", havingValue = "true", matchIfMissing = true)
+    public ConsumerRuntime consumerRuntime(
+            ConsumerConfig config,
+            LeakyBucket leakyBucket,
+            DedupeRegistry dedupeRegistry,
+            DefaultVideoCatalog videoCatalog,
+            MediaProcessor mediaProcessor,
+            MediaUploadServiceImpl mediaUploadService) throws IOException {
+        return new ConsumerRuntime(
+                config,
+                leakyBucket,
+                dedupeRegistry,
+                videoCatalog,
+                mediaProcessor,
+                mediaUploadService).start();
+    }
+
+    private static String[] consumerArguments(ApplicationArguments applicationArguments,
+                                              Environment environment) {
+        String[] options = {
+                "c",
+                "q",
+                "grpc-port",
+                "upload-dir",
+                "preview-dir",
+                "max-upload-size-mb",
+                "enable-dedup",
+                "enable-compress",
+                "worker-delay-ms"
+        };
+        List<String> arguments = new ArrayList<>();
+        for (String option : options) {
+            String alias = switch (option) {
+                case "c" -> "media.c";
+                case "q" -> "media.q";
+                case "upload-dir" -> "media.uploads-dir";
+                case "preview-dir" -> "media.previews-dir";
+                default -> null;
+            };
+            // Only Spring's actual application arguments represent Consumer CLI
+            // options. Short Environment keys can resolve unrelated JVM/system
+            // properties (for example, a working-directory value for "c").
+            boolean present = applicationArguments.containsOption(option);
+            List<String> optionValues = present ? applicationArguments.getOptionValues(option) : null;
+            String value = optionValues == null || optionValues.isEmpty() ? null : optionValues.get(0);
+
+            // Keep the explicitly namespaced Spring property aliases supported,
+            // while avoiding ambiguous short keys such as "c" and "q".
+            if (!present && alias != null) {
+                present = environment.containsProperty(alias);
+                value = present ? environment.getProperty(alias) : null;
+            }
+            if (!present) {
+                continue;
+            }
+            if (value == null || value.isBlank()) {
+                arguments.add("--" + option);
+            } else {
+                arguments.add("--" + option + "=" + value);
+            }
+        }
+        return arguments.toArray(String[]::new);
     }
 }

@@ -2,7 +2,6 @@ package com.example.media.consumer.catalog;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.IOException;
@@ -19,7 +18,6 @@ import java.util.stream.Stream;
  * Conforms to §5.5: add(video), list() (newest first, defensive copy), get(id).
  * Supports rebuilding or discovering videos from an uploads directory.
  */
-@Component
 public class DefaultVideoCatalog implements VideoCatalog {
     private static final Logger log = LoggerFactory.getLogger(DefaultVideoCatalog.class);
 
