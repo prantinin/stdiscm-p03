@@ -224,8 +224,11 @@ mvn -pl consumer -am test
 
    ```powershell
    $env:USE_FAKE = "false"
-   mvn -pl consumer spring-boot:run
-   ```
+   mvn -pl consumer spring-boot:run "-Dspring-boot.run.arguments=--c=1 --q=2 --grpc-port=50051"
+   ```  
+   
+where c is the number of threads for the consumer threads and p and is number of producer threads.
+
 
 4. Open [http://localhost:8080](http://localhost:8080) and check that the video gallery loads, previews play when hovering over a video, and videos play when clicked.
 
@@ -240,7 +243,7 @@ mvn -pl consumer -am test
 2. Run the Producer with three threads (`P1` to `P3` read `producer1/` to `producer3/`):
 
    ```powershell
-   mvn -pl producer exec:java "-Dexec.args=--p 3 --root sample_videos"
+   mvn -pl producer exec:java -Dexec.args="--p 3 --root sample_videos --port 50051"
    ```
 
    Videos that were already uploaded are rejected as duplicates, so re-running does not change the gallery.
