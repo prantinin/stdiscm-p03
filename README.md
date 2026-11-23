@@ -151,18 +151,11 @@ Replace the placeholders with the repository URL and directory you use. No repos
 
 ### 6.2 Build the project
 
-From the repository root:
 
-```powershell
-mvn clean package
-```
+Build and install all modules (`common`, `producer`, `consumer`) to your local Maven repository:
 
-This builds the `common`, `producer`, `consumer`, and `tools` modules in order. The `common` module generates the Java protobuf and gRPC classes from `common/src/main/proto/media.proto`, which the Producer and Consumer both depend on. The build also compiles the Java code and runs the JUnit tests. Do not edit the generated files manually.
-
-To build only the Consumer and the modules it depends on:
-
-```powershell
-mvn -pl consumer -am clean package
+```bash
+mvn clean install -DskipTests
 ```
 
 Maven must be installed and available as `mvn` in PowerShell. The Consumer tests may need FFmpeg and FFprobe on `PATH` (see Section 5).
@@ -195,21 +188,10 @@ Consumer command-line options are passed to the Spring Boot application (for exa
 
 ## 7. Running the Application
 
-### 7.1 Build the Project (Run once from repository root)
-
-Build and install all modules (`common`, `producer`, `consumer`) to your local Maven repository:
-
-```bash
-mvn clean install -DskipTests
-```
-
----
-
-### 7.2 Run Locally
-
 #### Step 1: Start the Consumer (Terminal 1)
 
 Start the Java Consumer and Spring Boot Web GUI in real upload mode (`USE_FAKE=false`):
+> Note: Could also edit application.properties and set `media.use-fake=${USE_FAKE:false}` to not need to set `USE_FAKE=false`.
 
 * **macOS / Linux (Bash):**
   ```bash
