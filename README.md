@@ -195,76 +195,57 @@ Consumer command-line options are passed to the Spring Boot application (for exa
 
 ## 7. Running the Application
 
-### 7.1 Verify the build and tests
+### 7.1 Build the Project (Run once from repository root)
 
-From the repository root, each of these should end in `BUILD SUCCESS`:
+Build and install all modules (`common`, `producer`, `consumer`) to your local Maven repository:
 
-```powershell
-mvn -pl producer -am test
-mvn -pl consumer -am test
+```bash
+mvn clean install -DskipTests
 ```
 
-### 7.2 Run locally
+---
 
-**Consumer side**
+### 7.2 Run Locally
 
-1. Build the project and run all tests:
+#### Step 1: Start the Consumer (Terminal 1)
 
-   ```powershell
-   mvn clean test
-   ```
+Start the Java Consumer and Spring Boot Web GUI in real upload mode (`USE_FAKE=false`):
 
-2. Install the Consumer and its dependencies (including `common`) into the local Maven repository:
+* **macOS / Linux (Bash):**
+  ```bash
+  USE_FAKE=false mvn -pl consumer spring-boot:run "-Dspring-boot.run.arguments=--c=2 --q=5 --grpc-port=50051"
+  ```
 
-   ```powershell
-   mvn -pl consumer -am install -DskipTests
-   ```
+* **Windows (PowerShell):**
+  ```powershell
+  $env:USE_FAKE = "false"
+  mvn -pl consumer spring-boot:run "-Dspring-boot.run.arguments=--c=2 --q=5 --grpc-port=50051"
+  ```
 
-3. Start the Spring Boot app with the real video catalog:
+> **Parameters:**
+> * `--c=2`: Number of consumer worker threads draining the queue.
+> * `--q=5`: Maximum capacity of the bounded leaky-bucket queue.
+> * `--grpc-port=50051`: Port for the gRPC upload service.
 
-   ```powershell
-   $env:USE_FAKE = "false"
-   mvn -pl consumer spring-boot:run "-Dspring-boot.run.arguments=--c=1 --q=2 --grpc-port=50051"
-   ```  
-   
-where c is the number of threads for the consumer threads and p and is number of producer threads.
+#### Step 2: Open the Web Gallery
 
+Open your browser and navigate to: **[http://localhost:8080](http://localhost:8080)**
 
-4. Open [http://localhost:8080](http://localhost:8080) and check that the video gallery loads, previews play when hovering over a video, and videos play when clicked.
+* The page will display the live dashboard with queue utilization (`0 / 5`), worker count, and *"No videos uploaded yet"*.
 
-**Producer side**
+#### Step 3: Run the Producer (Terminal 2)
 
-1. Open a second PowerShell window at the repository root. Optionally, create a new test video by re-encoding an existing one:
+Open a **second terminal** at the repository root and start the producer threads:
 
-   ```powershell
-   ffmpeg -y -i sample_videos\producer1\short5.mp4 -c:v libx264 -preset veryfast -crf 30 -an sample_videos\producer3\new_video.mp4
-   ```
+```bash
+mvn -pl producer exec:java "-Dexec.args=--p 2 --root sample_videos --port 50051"
+```
 
-2. Run the Producer with three threads (`P1` to `P3` read `producer1/` to `producer3/`):
+> **Parameters:**
+> * `--p 2`: Number of producer threads (`P1` reads `sample_videos/producer1/`, `P2` reads `sample_videos/producer2/`).
+> * `--root sample_videos`: Root folder containing producer folders.
+> * `--port 50051`: Target Consumer gRPC port.
 
-   ```powershell
-   mvn -pl producer exec:java -Dexec.args="--p 3 --root sample_videos --port 50051"
-   ```
-
-   Videos that were already uploaded are rejected as duplicates, so re-running does not change the gallery.
-
-3. Refresh the browser gallery and check that the new videos appear, previews play on hover, and videos play.
-
-### 7.3 Run across two VMs
-
-This describes the configuration implied by the code; it has not been tested on two separate VMs.
-
-1. On VM B (Consumer), install the JDK, Maven, and FFmpeg, then follow the Consumer steps in 7.2.
-2. On VM B, run `ipconfig` and note the IPv4 address reachable from VM A. Allow inbound TCP `50051` (gRPC) on VM B's firewall, and `8080` for machines that should view the GUI.
-3. On VM A (Producer), install the JDK and Maven, copy the project, and run `mvn -pl consumer -am install -DskipTests` once so `common` is available. Then run, replacing the placeholder with VM B's address:
-
-   ```powershell
-   mvn -pl producer exec:java "-Dexec.args=--p 3 --root sample_videos --addr <consumer-vm-ip>:50051"
-   ```
-
-4. From a browser that can reach VM B, open `http://<consumer-vm-ip>:8080`.
-
-The gRPC connection is insecure; TLS and authentication are not configured. Use it only on a network that is appropriate for a class demonstration.
 
 ## 8. Features Implemented
 
@@ -328,7 +309,7 @@ The integration and verification tests exercise multiple simulated clients local
 
 ### Manual local integration check
 
-Start the Consumer in real-catalog mode and run the Producer as described in Section 7.2. Check the Consumer logs, `consumer/uploads/`, `consumer/previews/`, the GUI, and the Producer's final summary. This is a manual procedure; no successful run is claimed here.
+Start the Consumer in real-catalog mode and run the Producer as described in Section 7. Check the Consumer logs, `consumer/uploads/`, `consumer/previews/`, the GUI, and the Producer's final summary. This is a manual procedure; no successful run is claimed here.
 
 ## 10. Sample Producer Output
 
